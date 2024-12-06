@@ -13,6 +13,7 @@ import teacherController from "./controllers/teahers.controller";
 import { setupDailyRecordCreation } from "../services/daily-records.cron";
 import { analyticsController } from "./controllers/analytics.controller";
 import { expensesController } from "./controllers/expenses.controller";
+import { sendOtpMail } from "../services/mailer.service";
 
 dotenv.config();
 
@@ -48,6 +49,33 @@ function authenticateToken(req: any, res: any, next: Function) {
 app.post("/signup", (req, res, next) => {
   userController.signup(req, res).catch(next); //Works
 });
+
+app.post("/get-otp", async (req: Request | any, res: Response | any, next) => {
+  const { email } = req.body;
+
+  // Input validation
+  if (!email) {
+    return res.status(400).json({ error: "Email is required." });
+  }
+
+  try {
+    // Attempt to send OTP email
+    const data = await sendOtpMail(email);
+
+    // Respond with success message and data
+    return res.status(201).json({ message: "OTP successfully sent.", data });
+  } catch (err) {
+    console.error("Error sending OTP:", err); // Log the error for debugging
+
+    // Determine the type of error and respond accordingly
+
+    return res.status(500).json({ error: "An unexpected error occurred." });
+  }
+});
+app.post("/reset-password", (req, res, next) => {
+  userController.resetPassword(req, res).catch(next); //Works
+});
+
 app.post("/login", (req, res, next) => {
   userController.login(req, res).catch(next); //Works
 });

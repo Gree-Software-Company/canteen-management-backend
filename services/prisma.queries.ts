@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { createUserInterface } from "../src/types/user.interface";
 
 const prisma = new PrismaClient();
@@ -154,4 +154,104 @@ export async function createClass(data: createUserInterface) {
     });
     return result_data;
   } catch (error) {}
+}
+
+export async function findOTPAndUpdateUser(
+  code: string,
+  newPassword: string
+): Promise<any> {
+  try {
+    // Find the OTP code
+    const otp_data = await prisma.otpCodes.findFirst({
+      where: { code },
+    });
+
+    // Check if OTP exists
+    if (!otp_data) {
+      throw new Error("OTP code does not exist");
+    }
+
+    // Check if OTP has expired
+    if (Date.now() > otp_data.expiresAt.getTime()) {
+      throw new Error("OTP code expired");
+    }
+
+    
+
+    // Update the user with the new password
+    const updated_user = await prisma.user.update({
+      where: { id: otp_data.userId },
+      data: { password: newPassword },
+    });
+
+    return updated_user; // Return the updated user or a success message
+  } catch (err) {
+    // Log the error for debugging purposes
+    console.error(err);
+
+    // Rethrow with additional context
+    throw new Error(`Could not update user password: ${err}`);
+  }
+}
+
+export async function saveOTP(email: string, otpRaw: string) {
+  try {
+    const user_data = await prisma.user.findUnique({
+      where: {
+        email: email,
+      },
+    });
+
+    if (!user_data) {
+      throw new Error("User not found");
+    }
+
+    const existingOtp = await prisma.otpCodes.findFirst({
+      where: {
+        userId: user_data?.id,
+      },
+    });
+
+    let result_data;
+    if (existingOtp) {
+      result_data = await prisma.otpCodes.update({
+        where: {
+          id: existingOtp?.id,
+        },
+        data: {
+          code: otpRaw,
+          expiresAt: new Date(Date.now() + 10 * 60000), 
+        },
+      });
+    } else {
+      result_data = await prisma.otpCodes.create({
+        data: {
+          code: otpRaw,
+          expiresAt: new Date(Date.now() + 10 * 60000), 
+          userId: user_data?.id,
+        },
+      });
+    }
+
+    return result_data;
+  } catch (error) {
+    console.error("Error saving OTP:", error);
+    throw new Error("Could not update value for this user");
+  }
+}
+
+export async function updateUserPassword(email: string, password: string) {
+  try {
+    const result_data = await prisma.user.update({
+      where: {
+        email: email,
+      },
+      data: {
+        password: password,
+      },
+    });
+    return result_data;
+  } catch (error) {
+    throw new Error("Could no update top value for this user");
+  }
 }

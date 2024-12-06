@@ -2,6 +2,9 @@ import { PrismaClient } from "@prisma/client";
 import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { sendOtpMail } from "../../services/mailer.service";
+import { findOTPAndUpdateUser } from "../../services/prisma.queries";
+import { json } from "stream/consumers";
 
 const prisma = new PrismaClient();
 
@@ -148,6 +151,46 @@ export const userController = {
       res.status(204).send();
     } catch (error) {
       res.status(400).json({ error: "Error deleting user" });
+    }
+  },
+  getOtpCode: async (req: Request, res: Response) => {
+    const { email } = req.body;
+    console.log(email);
+    try {
+      const data = await sendOtpMail(email);
+      return res
+        .json({ message: "otp successfully sent.", data: data })
+        .status(201);
+    } catch (err) {
+      console.log("there was can error ", err);
+      return res.json({ err });
+    }
+  },
+
+  resetPassword: async (req: Request, res: Response) => {
+    const { code, password } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    try {
+      const data = await prisma.otpCodes.findFirst({
+        where: {
+          code: code,
+        },
+      });
+      if (data) {
+        const result = findOTPAndUpdateUser(code, hashedPassword);
+        return res
+          .json({
+            message: "password updated sucessfully",
+            data: result,
+          })
+          .status(201);
+      } else {
+        throw new Error("code is invalid");
+      }
+    } catch (err) {
+      return res
+        .json({ message: "there was an error", error_details: err })
+        .status(500);
     }
   },
 };
