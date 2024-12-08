@@ -66,12 +66,13 @@ app.post("/get-otp", async (req: Request | any, res: Response | any, next) => {
     return res.status(201).json({ message: "OTP successfully sent.", data });
   } catch (err) {
     console.error("Error sending OTP:", err); // Log the error for debugging
-
     // Determine the type of error and respond accordingly
-
-    return res.status(500).json({ error: "An unexpected error occurred." });
+    return res
+      .status(500)
+      .json({ error: `An unexpected error occurred, ${err}` });
   }
 });
+
 app.post("/reset-password", (req, res, next) => {
   userController.resetPassword(req, res).catch(next); //Works
 });
