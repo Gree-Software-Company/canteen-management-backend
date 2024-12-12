@@ -1,15 +1,22 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { Request, Response } from "express";
+import { TeacherRecord } from "../types/user.interface";
 
 const prisma = new PrismaClient();
 
 export const recordController = {
   // Generate daily records for each student in a specific class or all classes
   generateDailyRecords: async (req: Request, res: Response) => {
-    const { classId } = req.query;
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
+    const { classId } = req.params;
+    const date = new Date(req.query.date as string);
+    const formattedDate = date;
 
+    //Validate formattedDate
+    if (isNaN(formattedDate.getTime())) {
+      return res.status(400).json({ error: "Invalid date" });
+    }
+
+    formattedDate.setHours(0, 0, 0, 0);
     try {
       // Get the settings amount
       const settings = await prisma.settings.findFirst({
@@ -39,7 +46,7 @@ export const recordController = {
               data: {
                 classId: classItem.id,
                 payedBy: student.id,
-                submitedAt: date,
+                submitedAt: formattedDate,
                 amount: 0,
                 hasPaid: false,
                 isPrepaid: false,
@@ -56,7 +63,7 @@ export const recordController = {
             ) {
               skippedRecords.push({
                 studentId: student.id,
-                date: date.toISOString(),
+                date: formattedDate.toString(),
               });
             } else {
               throw error;
@@ -189,7 +196,6 @@ export const recordController = {
       res.status(500).json({ error: "Internal Server Error" });
     }
   },
-
   updateStudentStatus: async (req: Request, res: Response) => {
     const { id } = req.params;
     const { hasPaid, isAbsent } = req.body;
@@ -222,7 +228,6 @@ export const recordController = {
       }
     }
   },
-
   getAllRecords: async (req: Request, res: Response) => {
     try {
       const records = await prisma.record.findMany();
@@ -232,13 +237,97 @@ export const recordController = {
       res.status(500).json({ error: "Internal Server Error" });
     }
   },
+  getAllTeacherSubmittedRecords: async (req: Request, res: Response) => {
+    try {
+      const date = new Date(req.query.date as string);
+      if (isNaN(date.getTime())) {
+        return res.status(400).json({
+          message: `Date is required and must be a string,
+            received ${date} instead
+            `,
+        });
+      }
 
+      const startOfDay = new Date(new Date(date).setHours(0, 0, 0, 0));
+      const endOfDay = new Date(new Date(date).setHours(23, 59, 59, 999));
+
+      const records = await prisma.record.findMany({
+        where: {
+          submitedAt: {
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+        },
+        include: {
+          class: true,
+          student: true,
+          teacher: true,
+        },
+      });
+
+      const formattedRecords = records.reduce((acc, record) => {
+        // Skip records where classId is null
+        if (record.classId === null) {
+          return acc;
+        }
+
+        // Ensure the classId exists in the accumulator
+        if (!acc[record.classId]) {
+          acc[record.classId] = {
+            classId: record.classId,
+            date: record.submitedAt.toISOString().split("T")[0],
+            paidStudents: [],
+            unpaidStudents: [],
+            absentStudents: [],
+            submittedBy: record.submitedBy,
+            teacher: {
+              id: record.teacher?.id || 0,
+              name: record.teacher?.name || "",
+            },
+            class: {
+              id: record.class?.id || 0,
+              name: record.class?.name || "",
+            },
+          };
+        }
+
+        const studentRecord = {
+          id: record.payedBy || 0,
+          amount: record.settingsAmount || 0,
+          paidBy: record.payedBy?.toString() || "",
+          hasPaid: record.hasPaid || false,
+          date: record.submitedAt.toISOString().split("T")[0],
+          name: record.student?.name || "",
+          class: record.class?.name || "",
+        };
+
+        if (record.isAbsent) {
+          acc[record.classId]?.absentStudents?.push({
+            ...studentRecord,
+            amount_owing: record.settingsAmount || 0,
+          });
+        } else if (record.hasPaid) {
+          acc[record.classId]?.paidStudents?.push(studentRecord);
+        } else {
+          acc[record.classId]?.unpaidStudents?.push(studentRecord);
+        }
+
+        return acc;
+      }, {} as Record<number, TeacherRecord>);
+      res.json(Object.values(formattedRecords));
+    } catch (error) {
+      console.error("Error fetching teacher records:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  },
   getStudentRecordsByClassAndDate: async (req: Request, res: Response) => {
     const classId = parseInt(req.params.classId);
     const date = new Date(req.query.date as string);
 
     if (isNaN(classId) || isNaN(date.getTime())) {
-      return res.status(400).json({ error: "Invalid classId or date" });
+      return res
+        .status(400)
+        .json({ error: "Invalid classId or date - Is being returned!" });
     }
 
     try {
@@ -264,7 +353,6 @@ export const recordController = {
       res.status(500).json({ error: "Internal Server Error" });
     }
   },
-
   submitTeacherRecord: async (req: Request, res: Response) => {
     const {
       classId,
@@ -405,7 +493,6 @@ export const recordController = {
       res.status(500).json({ error: "Internal Server Error" });
     }
   },
-
   update: async (req: Request, res: Response) => {
     const { id } = req.params;
     const {
@@ -435,7 +522,6 @@ export const recordController = {
       res.status(400).json({ error: "Error updating record" });
     }
   },
-
   delete: async (req: Request, res: Response) => {
     const { id } = req.params;
     try {

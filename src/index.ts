@@ -129,8 +129,21 @@ app.get("/records", authenticateToken, async (req, res, next) => {
 app.post(
   "/records/generate-daily",
   authenticateToken,
-  recordController.generateDailyRecords
+  async (req, res, next) => {
+    try {
+      await recordController.generateDailyRecords(req, res);
+    } catch (error) {
+      next(error);
+    }
+  }
 );
+app.get("/records/teachers", authenticateToken, async (req, res, next) => {
+  try {
+    await recordController.getAllTeacherSubmittedRecords(req, res);
+  } catch (error) {
+    next(error);
+  }
+});
 app.get("/records/:classId", authenticateToken, async (req, res, next) => {
   try {
     await recordController.getStudentRecordsByClassAndDate(req, res);
