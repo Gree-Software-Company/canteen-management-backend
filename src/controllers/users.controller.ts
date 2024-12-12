@@ -4,9 +4,14 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { sendOtpMail } from "../../services/mailer.service";
 import { findOTPAndUpdateUser } from "../../services/prisma.queries";
-import { json } from "stream/consumers";
 
 const prisma = new PrismaClient();
+
+
+class UserController implements userControllerI {
+
+  
+}
 
 export const userController = {
   signup: async (req: Request, res: Response) => {
